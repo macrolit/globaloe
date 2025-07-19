@@ -57,20 +57,25 @@
 ## Security Model
     
 - **Ephemeral Use:**  
-    All decrypted data is wiped from memory when not in use.
+
+  All decrypted data is wiped from memory when not in use.
 
 - **AES256 Encryption**
+
   File extension notes are visible within Obsidian once the plugin is enabled and decrypted with the password.
   
 - **Cloud environments**
-	Can be securely used for safe storage of sensitive files in cloud services
+
+  Can be securely used for safe storage of sensitive files in cloud services
 
 ## Dedicated file explorer
 
 - **Encrypted Index**
+
   File names are simply not present as in usual files and stored instead in YAML frontmatter and written to an encrypted index file (file explorer index)
 
 - **When entering password**
+
   An index from encrypted file contents in the vault is decrypted at password enter event and utilised for a content view table with actual file names
 
 ## Usage
@@ -94,7 +99,7 @@
 ## Caveats
 
 - **Not necessarily Zero-Knowledge**
-  Not Zero-Knowledge since the file structure is plainly exposed, so it's up to the user to manage file structures and discreet management.
+  Not Zero-Knowledge since the file structure is plainly exposed, so it's up to the user to manage file structures for discreet management.
   
 - **Early Implementation**
   Expect some things to break and make sure to back up your files regularly, data loss may occur.
