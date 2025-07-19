@@ -41,6 +41,8 @@
     - The file can be toggled (in toolbar) to display in read-only rendered (markdown preview) mode.
       
     - The file can be toggled back to edit mode
+  
+    - Regular Markdown files (.md) are rendered as default and the plugin does not interfere with it's regular workflow
         
 3. **On File Close or App Exit:**
     
@@ -99,12 +101,15 @@
 ## Caveats
 
 - **Not necessarily Zero-Knowledge**
-  Not Zero-Knowledge since the file structure is plainly exposed, so it's up to the user to manage file structures for discreet management.
+
+  Not Zero-Knowledge compatible since the file structure is plainly exposed, so it's up to the user to manage file structures for discreet management.
   
 - **Early Implementation**
+
   Expect some things to break and make sure to back up your files regularly, data loss may occur.
 
 - **Multiple Files**
+
   Multi-tab usability may be limited.
 
 
