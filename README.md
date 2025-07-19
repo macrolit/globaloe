@@ -70,6 +70,10 @@
 
   Can be securely used for safe storage of sensitive files in cloud services
 
+- **Isolated Usability**
+  
+  Community plugins, Core plugins, other Obsidian functionaly and basic editor features are isolated from .aes256 files within the vault.
+
 ## Dedicated file explorer
 
 - **Encrypted Index**
@@ -108,14 +112,17 @@
 
   Expect some things to break and make sure to back up your files regularly, data loss may occur.
 
-- **Multiple Files**
+- **Limited Multiple File Editing**
 
   Multi-tab usability may be limited.
 
+- **Limited Interaction**
+  
+  Other plugins cannot interact with the encrypted notes for security reasons.
 
 ### Bottom Line
 
-This is an enhancement for a work-around project to note-wise encryption security in Obsidian, especially compatible for cloud environments. Although not being a zero-trace zero-knowledge approach, it is decent enough to keep oneself (relatively) calm when it comes to sending sensitive files to foreign cloud servers.
+This is an enhancement for a work-around project to note-wise encryption security in Obsidian, especially compatible for cloud environments. Although not being a zero-trace zero-knowledge approach, it is decent enough to keep oneself (relatively) calm when it comes to syncing sensitive files to foreign cloud servers.
 
 
 
