@@ -5,7 +5,7 @@
 ## Features
 
 - **Ephemeral In-Memory Decryption:**  
-    Decrypts selected markdown files (or the entire vault for small vaults) into RAM only. No decrypted data is ever written to disk.
+    Decrypts selected markdown files into RAM only. No decrypted data is ever written to disk.
     
 - **Secure Rendered View:**  
     View decrypted notes in Obsidian’s reading (preview) mode without risk of unencrypted content being written to disk.
