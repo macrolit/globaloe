@@ -7,17 +7,8 @@
 - **Ephemeral In-Memory Decryption:**  
     Decrypts selected markdown files (or the entire vault for small vaults) into RAM only. No decrypted data is ever written to disk.
     
-- **Zero-Knowledge Encryption:**  
-    All encryption and decryption is performed client-side. Only you hold the encryption key.
-    
-- **Secure Rendered Viewing:**  
+- **Secure Rendered View:**  
     View decrypted notes in Obsidian’s reading (preview) mode without risk of unencrypted content being written to disk.
-    
-- **Read-Only Option:**  
-    Optionally restrict decrypted files to read-only mode to prevent accidental unencrypted saves.
-    
-- **Multi-File In-Memory Support:**  
-    Decrypt and view multiple markdown files simultaneously in memory (for multi-tab workflows).
     
 - **Encrypted Filename Mapping:**  
     Filenames are encrypted on disk; the plugin maintains an in-memory mapping for displaying original filenames during use.
