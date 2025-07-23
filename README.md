@@ -64,7 +64,7 @@
 
 - **AES256 Encryption**
 
-  File extension notes are visible within Obsidian once the plugin is enabled and decrypted with the password.
+  Notes fully encrypted with AES-256-GCM. Using authenticated encryption, preventing tampering. Encrypted notes are visible within Obsidian once the plugin is enabled and decrypted with the password.
   
 - **Cloud environments**
 
@@ -73,6 +73,33 @@
 - **Isolated Usability**
   
   Community plugins, Core plugins, other Obsidian functionaly and basic editor features are isolated from .aes256 files within the vault.
+  
+- **Secure Filename Model**
+  
+  Custom filenames encrypted and stored separately from file metadata.
+
+- **Secure Markdown Rendering**
+
+  Document structure: Markdown formatting hidden within encrypted content.
+
+- **Custom Salt Definition**
+  
+  Users can define their own password salt.
+
+- **Strong Key Derivation**
+  
+  PBKDF2: 1,000,000 iterations provide strong key derivation, also using SHA-512 as strong hashing algorithm.
+  
+- **Random IV Derivation**
+  
+  Each encryption uses a fresh IV.
+  
+
+## **Security Viability**
+
+Strong against: Brute force attacks (due to 1M PBKDF2 iterations)
+Moderate against: Most cryptographic attacks (solid AES-256-GCM)
+
 
 ## Dedicated file explorer
 
@@ -102,11 +129,24 @@
     All decrypted content is wiped from memory automatically.
 
 
+
+
+## **Information Leakage**
+
+While file content is fully encrypted, an observer can see:
+
+- Which files are encrypted (.aes256 extension): Number of encrypted files
+- File sizes (±16 bytes): Approximate content length discernible
+- Access patterns: Frequency of file access observable
+- Directory names and folder structure: Everything other than .aes256 notes is handled by Obsidian in plain text
+- File timestamps: Creation/modification times visible
+
+
 ## Caveats
 
 - **Not necessarily Zero-Knowledge**
 
-  Not Zero-Knowledge compatible since the file structure is plainly exposed, so it's up to the user to manage file structures for discreet management.
+  Not Zero-Knowledge compatible since the file structure is plainly exposed, as well as significant metadata leakage (file sizes, timestamps, counts) so it's up to the user to manage file structures and metadata for discreet information management.
   
 - **Early Implementation**
 
@@ -123,6 +163,23 @@
 ### Bottom Line
 
 This is an enhancement for a work-around project to note-wise encryption security in Obsidian, especially compatible for cloud environments. Although not being a zero-trace zero-knowledge approach, it is decent enough to keep oneself (relatively) calm when it comes to syncing sensitive files to foreign cloud servers.
+
+Suitability:
+✅ Good for: Personal notes, casual privacy protection, cloud storage protection
+❌ Not suitable for: Enterprise use, highly sensitive data, passcode or key storage, compliance requirements
+
+Possible Improvements:
+
+Short-term: 
+Add password strength requirements
+
+Long-term: 
+Consider implementing metadata-proof measures (file size obfuscation, timestamp randomization, etc.)
+
+If Possible: 
+Prevent Side-Channel Vulnerabilities (Medium Risk); 
+Timing attacks: Password verification timing could leak some information, 
+Memory access patterns: Could be analyzed in sophisticated attacks
 
 
 
