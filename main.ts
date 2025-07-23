@@ -30,11 +30,36 @@ const b64tou8 = (x: string) => Uint8Array.from(atob(x), c => c.charCodeAt(0));
 
 async function pbkdf2Async(password: string, salt: string, iterations: number) {
     const ec = new TextEncoder();
-    const keyMaterial = await subtle.importKey('raw', ec.encode(password), 'PBKDF2', false, ['deriveKey']);
-    const key = await subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-512', salt: ec.encode(salt), iterations: iterations }, keyMaterial, { name: 'AES-GCM', length: 256, }, true, ['encrypt', 'decrypt']);
-    const exported = new JsCrypto.Word32Array(new Uint8Array(await subtle.exportKey("raw", key)));
-    return exported;
+    
+    // Use secure buffer for password
+    const passwordBuffer = SecureMemory.stringToSecureBuffer(password);
+    
+    try {
+        const keyMaterial = await subtle.importKey('raw', passwordBuffer, 'PBKDF2', false, ['deriveKey']);
+        const key = await subtle.deriveKey(
+            { 
+                name: 'PBKDF2', 
+                hash: 'SHA-512', 
+                salt: ec.encode(salt), 
+                iterations: iterations 
+            }, 
+            keyMaterial, 
+            { 
+                name: 'AES-GCM', 
+                length: 256 
+            }, 
+            true, 
+            ['encrypt', 'decrypt']
+        );
+        
+        const exported = new JsCrypto.Word32Array(new Uint8Array(await subtle.exportKey("raw", key)));
+        return exported;
+    } finally {
+        // Always clear the password buffer
+        SecureMemory.clearBuffer(passwordBuffer);
+    }
 }
+
 
 const aes256gcm = (key: any) => {
   const encrypt = (msg: any, origIv: any) => {
@@ -75,7 +100,7 @@ const aes256gcm = (key: any) => {
 export const VIEW_TYPE_ENCRYPTED_FILE = "encrypted-file-view";
 export const VIEW_TYPE_ENCRYPTED_PREVIEW = "encrypted-preview-view";
 export const VIEW_TYPE_ENCRYPTED_EXPLORER = "encrypted-explorer-view";
-export const DEFAULT_SALT_VALUE = "7f2ea27bd475702540c5211aed17904202a3ac06b0e87fdd8fcdec960a0fe388";
+export const DEFAULT_SALT_VALUE = ""; // Will be generated per-vault
 
 // Utility functions for YAML parsing
 function extractFrontMatter(content: string): { frontMatter: any; body: string } {
@@ -101,6 +126,198 @@ function addOrUpdateFrontMatter(content: string, updates: any): string {
     
     const yamlString = stringifyYaml(newFrontMatter);
     return `---\n${yamlString}---\n${body}`;
+}
+
+
+
+// Secure memory utilities for handling sensitive data
+class SecureMemory {
+    static createSecureBuffer(size: number): Uint8Array {
+        return new Uint8Array(size);
+    }
+
+    static clearBuffer(buffer: Uint8Array): void {
+        if (buffer && buffer.length > 0) {
+            crypto.getRandomValues(buffer);
+            buffer.fill(0);
+        }
+    }
+
+    static stringToSecureBuffer(str: string): Uint8Array {
+        const encoder = new TextEncoder();
+        return encoder.encode(str);
+    }
+
+    static secureBufferToString(buffer: Uint8Array): string {
+        const decoder = new TextDecoder();
+        return decoder.decode(buffer);
+    }
+
+    // Secure string comparison using typed arrays to prevent timing attacks
+    static secureEquals(a: Uint8Array, b: Uint8Array): boolean {
+        if (a.length !== b.length) return false;
+        
+        let result = 0;
+        for (let i = 0; i < a.length; i++) {
+            result |= a[i] ^ b[i];
+        }
+        return result === 0;
+    }
+}
+
+// Salt generation and management
+class SaltManager {
+    private static readonly SALT_KEY = 'vault_encryption_salt';
+    private static readonly SALT_LENGTH = 32; // 256 bits
+
+    static generateSalt(): string {
+        const saltBytes = new Uint8Array(this.SALT_LENGTH);
+        crypto.getRandomValues(saltBytes);
+        return Array.from(saltBytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    static async getVaultSalt(plugin: GlobalMarkdownEncrypt): Promise<string> {
+        try {
+            const data = await plugin.loadData();
+            
+            if (data && data[this.SALT_KEY] && typeof data[this.SALT_KEY] === 'string' && data[this.SALT_KEY].length === this.SALT_LENGTH * 2) {
+                return data[this.SALT_KEY];
+            }
+
+            const newSalt = this.generateSalt();
+            
+            const currentData = data || {};
+            currentData[this.SALT_KEY] = newSalt;
+            await plugin.saveData(currentData);
+            
+            return newSalt;
+        } catch (error) {
+            console.error('Failed to manage vault salt:', error);
+            return this.generateSalt();
+        }
+    }
+
+    static async migrateSalt(plugin: GlobalMarkdownEncrypt, oldSalt: string): Promise<string> {
+        const newSalt = await this.getVaultSalt(plugin);
+        
+        // Skip if already migrated or same salt
+        if (newSalt === oldSalt) return newSalt;
+    
+        // Only migrate from hardcoded salt
+        if (oldSalt === "7f2ea27bd475702540c5211aed17904202a3ac06b0e87fdd8fcdec960a0fe388") {
+            new Notice('Migrating encrypted files to new security standard...', 10000);
+            
+            // 1. Get current password
+            const currentPassword = plugin.getPasswordManager().getPassword();
+            if (!currentPassword) {
+                new Notice('Password required for migration', 5000);
+                return newSalt;
+            }
+            
+            // 2. Create cipher with old salt
+            const oldKey = await pbkdf2Async(currentPassword, oldSalt, 1000000);
+            const oldCipher = aes256gcm(oldKey);
+            
+            // 3. Create cipher with new salt
+            const newKey = await pbkdf2Async(currentPassword, newSalt, 1000000);
+            const newCipher = aes256gcm(newKey);
+            
+            // 4. Get all encrypted files
+            const encryptedFiles = plugin.app.vault.getFiles().filter(f => f.extension === 'aes256');
+            let successCount = 0;
+            
+            console.log(`Found ${encryptedFiles.length} encrypted files to migrate`);
+            
+            // 5. Migrate each file
+            for (const file of encryptedFiles) {
+                try {
+                    console.log(`Migrating ${file.path}...`);
+                    const content = await plugin.app.vault.read(file);
+                    const encryptedData = JSON.parse(content);
+                    
+                    // Check if this file needs migration (has old salt or no salt field)
+                    if (encryptedData.salt && encryptedData.salt === newSalt) {
+                        console.log(`${file.path} already migrated`);
+                        successCount++;
+                        continue;
+                    }
+                    
+                    // Decrypt with OLD salt/cipher
+                    const decrypted = oldCipher.decrypt(
+                        encryptedData.ciphertext,
+                        encryptedData.iv,
+                        encryptedData.tag
+                    );
+                    
+                    console.log(`Successfully decrypted ${file.path}`);
+                    
+                    // Re-encrypt with NEW salt and NEW IV (don't pass old IV)
+					const [newCiphertext, newIv, newTag] = newCipher.encrypt(decrypted, null);
+					                                                        
+                    // Save with new encryption
+                    const newEncryptedData = {
+                        iv: newIv,
+                        tag: newTag,
+                        ciphertext: newCiphertext,
+                        salt: newSalt
+                    };
+                    
+                    await plugin.app.vault.modify(file, JSON.stringify(newEncryptedData, null, 2));
+                    
+                    console.log(`Successfully migrated ${file.path}`);
+                    successCount++;
+                    
+                } catch (e) {
+                    console.error(`Failed to migrate ${file.path}:`, e);
+                    new Notice(`Failed to migrate ${file.name} - ${e.message}`, 5000);
+                }
+            }
+            
+            new Notice(`Migration complete! ${successCount}/${encryptedFiles.length} files migrated.`, 8000);
+            
+            if (successCount < encryptedFiles.length) {
+                new Notice(`${encryptedFiles.length - successCount} files failed to migrate. Check console for details.`, 10000);
+            }
+        }
+        
+        return newSalt;
+    }
+}
+
+// Enhanced password handling with secure memory management
+class SecurePasswordManager {
+    private passwordBuffer: Uint8Array | null = null;
+    private static instance: SecurePasswordManager | null = null;
+
+    private constructor() {}
+
+    static getInstance(): SecurePasswordManager {
+        if (!this.instance) {
+            this.instance = new SecurePasswordManager();
+        }
+        return this.instance;
+    }
+
+    setPassword(password: string): void {
+        this.clearPassword();
+        this.passwordBuffer = SecureMemory.stringToSecureBuffer(password);
+    }
+
+    getPassword(): string | null {
+        if (!this.passwordBuffer) return null;
+        return SecureMemory.secureBufferToString(this.passwordBuffer);
+    }
+
+    clearPassword(): void {
+        if (this.passwordBuffer) {
+            SecureMemory.clearBuffer(this.passwordBuffer);
+            this.passwordBuffer = null;
+        }
+    }
+
+    hasPassword(): boolean {
+        return this.passwordBuffer !== null && this.passwordBuffer.length > 0;
+    }
 }
 
 // Custom encrypted file explorer view
@@ -612,14 +829,14 @@ export class EncryptedFileView extends MarkdownView {
 
 
 interface GlobalMarkdownEncryptSettings {
-    saltValue: string;
+    // Removed saltValue from settings - it's now managed separately
     defaultViewMode: 'edit' | 'preview';
     showEncryptedExplorer: boolean;
     enableFilenameHover: boolean;
 }
 
 const DEFAULT_SETTINGS: Partial<GlobalMarkdownEncryptSettings> = {
-    saltValue: DEFAULT_SALT_VALUE,
+    // Removed saltValue from defaults
     defaultViewMode: 'preview',
     showEncryptedExplorer: true,
     enableFilenameHover: true
@@ -633,9 +850,15 @@ export default class GlobalMarkdownEncrypt extends Plugin {
     public isUnlocked: boolean = false;
     private ribbonIcon: HTMLElement | null = null;
     private viewsRegistered: boolean = false; 
-
-    
-
+    private securePasswordManager: SecurePasswordManager;
+	private vaultSalt: string = "";
+	public getPasswordManager(): SecurePasswordManager {
+	    return this.securePasswordManager;
+	}
+    public getVaultSalt(): string {
+        return this.vaultSalt;
+    }
+	    
     private async loadFilenameIndex(): Promise<void> {
 	    try {
 	        const data = await this.loadData();
@@ -727,7 +950,7 @@ export default class GlobalMarkdownEncrypt extends Plugin {
                 iv: iv,
                 tag: tag,
                 ciphertext: ciphertext,
-                salt: this.settings.saltValue,
+                salt: this.vaultSalt, // Use vault-specific salt
             });
 
             const file = await this.app.vault.create(newFilepath, encData);
@@ -778,7 +1001,17 @@ export default class GlobalMarkdownEncrypt extends Plugin {
     }
 
     async onload() {
-        await this.loadSettings();
+		await this.loadSettings();
+        
+        this.securePasswordManager = SecurePasswordManager.getInstance();
+
+	    try {
+            this.vaultSalt = await SaltManager.getVaultSalt(this);
+        } catch (e) {
+            console.error("Failed to get vault salt", e);
+            this.vaultSalt = "7f2ea27bd475702540c5211aed17904202a3ac06b0e87fdd8fcdec960a0fe388";
+        }
+        
         this.addSettingTab(new GlobalMarkdownEncryptSettingTab(this.app, this));
     
         // Only create ribbon icon if it doesn't exist
@@ -917,50 +1150,82 @@ export default class GlobalMarkdownEncrypt extends Plugin {
         new InputPasswordModal(this.app, async (password) => {
             if (!password) return;
             
+            // Store password securely
+            this.securePasswordManager.setPassword(password);
+            
             try {
-                const key = await pbkdf2Async(password, this.settings.saltValue, 1000000);
-                const testCipher = aes256gcm(key);
+                // FIRST: Check if we need to migrate from old salt to new salt
+                const oldHardcodedSalt = "7f2ea27bd475702540c5211aed17904202a3ac06b0e87fdd8fcdec960a0fe388";
+                const currentVaultSalt = await SaltManager.getVaultSalt(this); // Get NEW salt
                 
+                let workingSalt = currentVaultSalt; // Default to new salt
                 let passwordValid = false;
                 
-                try {
-                    const data = await this.loadData();
-                    if (data && data.encryptedFilenameIndex) {
-                        testCipher.decrypt(
-                            data.encryptedFilenameIndex.ciphertext,
-                            data.encryptedFilenameIndex.iv,
-                            data.encryptedFilenameIndex.tag
-                        );
-                        passwordValid = true;
-                    }
-                } catch (e) {
-                }
+                // Check if we have files encrypted with the old hardcoded salt
+                const encryptedFiles = this.app.vault.getFiles().filter(file => file.extension === 'aes256');
+                let needsMigration = false;
                 
-                if (!passwordValid) {
-                    const encryptedFiles = this.app.vault.getFiles().filter(file => file.extension === 'aes256');
-                    if (encryptedFiles.length > 0) {
+                if (encryptedFiles.length > 0) {
+                    // Try to decrypt the first file with the NEW salt
+                    try {
+                        const testKey = await pbkdf2Async(password, currentVaultSalt, 1000000);
+                        const testCipher = aes256gcm(testKey);
+                        
+                        const content = await this.app.vault.read(encryptedFiles[0]);
+                        const encryptedData = JSON.parse(content);
+                        testCipher.decrypt(encryptedData.ciphertext, encryptedData.iv, encryptedData.tag);
+                        
+                        // Success with new salt
+                        passwordValid = true;
+                        console.log("Files are already using new salt");
+                    } catch (e) {
+                        // Failed with new salt, try old salt
+                        console.log("Failed with new salt, trying old salt...");
                         try {
+                            const oldKey = await pbkdf2Async(password, oldHardcodedSalt, 1000000);
+                            const oldCipher = aes256gcm(oldKey);
+                            
                             const content = await this.app.vault.read(encryptedFiles[0]);
                             const encryptedData = JSON.parse(content);
-                            testCipher.decrypt(encryptedData.ciphertext, encryptedData.iv, encryptedData.tag);
+                            oldCipher.decrypt(encryptedData.ciphertext, encryptedData.iv, encryptedData.tag);
+                            
+                            // Success with old salt - need migration
                             passwordValid = true;
-                        } catch (e) {
+                            needsMigration = true;
+                            workingSalt = oldHardcodedSalt; // Use old salt temporarily
+                            console.log("Files are using old salt - migration needed");
+                        } catch (e2) {
+                            // Failed with both salts
+                            this.securePasswordManager.clearPassword();
                             new Notice('Invalid password or corrupted encrypted files', 5000);
                             setTimeout(() => this.showPasswordPrompt(), 100);
                             return;
                         }
-                    } else {
-                        passwordValid = true;
                     }
+                } else {
+                    // No encrypted files - accept any password for new vault
+                    passwordValid = true;
+                    console.log("No encrypted files found - new vault");
                 }
                 
                 if (passwordValid) {
-                    this.aesCipher = testCipher;
+                    // Create cipher with the working salt (old if migration needed, new otherwise)
+                    const workingKey = await pbkdf2Async(password, workingSalt, 1000000);
+                    this.aesCipher = aes256gcm(workingKey);
+                    this.vaultSalt = workingSalt;
                     this.isUnlocked = true;
                     
+                    // If migration is needed, do it now
+                    if (needsMigration) {
+                        new Notice('Migrating encrypted files to new security standard...', 10000);
+                        await this.performMigration(password, oldHardcodedSalt, currentVaultSalt);
+                    }
+                    
+                    // Load filename index and setup views
                     await this.loadFilenameIndex();
                     
-                    this.registerView(VIEW_TYPE_ENCRYPTED_FILE, (leaf) => new EncryptedFileView(leaf, this.aesCipher, this.settings.saltValue, this));
+                    // Register views
+                    this.registerView(VIEW_TYPE_ENCRYPTED_FILE, (leaf) => new EncryptedFileView(leaf, this.aesCipher, this.vaultSalt, this));
                     this.registerView(VIEW_TYPE_ENCRYPTED_PREVIEW, (leaf) => new EncryptedPreviewView(leaf, this.aesCipher, this));
                     this.registerView(VIEW_TYPE_ENCRYPTED_EXPLORER, (leaf) => new EncryptedExplorerView(leaf, this));
                     
@@ -971,11 +1236,9 @@ export default class GlobalMarkdownEncrypt extends Plugin {
                     }
                     
                     new Notice('Successfully unlocked encrypted files', 3000);
-                } else {
-                    new Notice('Invalid password', 3000);
-                    setTimeout(() => this.showPasswordPrompt(), 100);
                 }
             } catch (error) {
+                this.securePasswordManager.clearPassword();
                 console.error('Password verification failed:', error);
                 new Notice('Password verification failed. Please try again.', 3000);
                 setTimeout(() => this.showPasswordPrompt(), 100);
@@ -989,6 +1252,66 @@ export default class GlobalMarkdownEncrypt extends Plugin {
         this.showPasswordPrompt();
     }
 
+	private async performMigration(password: string, oldSalt: string, newSalt: string): Promise<void> {
+	    try {
+	        // Create both ciphers
+	        const oldKey = await pbkdf2Async(password, oldSalt, 1000000);
+	        const oldCipher = aes256gcm(oldKey);
+	        
+	        const newKey = await pbkdf2Async(password, newSalt, 1000000);
+	        const newCipher = aes256gcm(newKey);
+	        
+	        // Get all encrypted files
+	        const encryptedFiles = this.app.vault.getFiles().filter(f => f.extension === 'aes256');
+	        let successCount = 0;
+	        
+	        console.log(`Migrating ${encryptedFiles.length} encrypted files...`);
+	        
+	        for (const file of encryptedFiles) {
+	            try {
+	                console.log(`Migrating ${file.path}...`);
+	                const content = await this.app.vault.read(file);
+	                const encryptedData = JSON.parse(content);
+	                
+	                // Decrypt with old cipher
+	                const decrypted = oldCipher.decrypt(
+	                    encryptedData.ciphertext,
+	                    encryptedData.iv,
+	                    encryptedData.tag
+	                );
+	                
+	                // Re-encrypt with new cipher (generate new IV)
+					const [newCiphertext, newIv, newTag] = newCipher.encrypt(decrypted, null);
+						                
+	                // Save with new encryption
+	                const newEncryptedData = {
+	                    iv: newIv,
+	                    tag: newTag,
+	                    ciphertext: newCiphertext,
+	                    salt: newSalt
+	                };
+	                
+	                await this.app.vault.modify(file, JSON.stringify(newEncryptedData, null, 2));
+	                successCount++;
+	                
+	            } catch (e) {
+	                console.error(`Failed to migrate ${file.path}:`, e);
+	            }
+	        }
+	        
+	        // Update the vault salt and cipher to use the new salt
+	        this.vaultSalt = newSalt;
+	        const finalKey = await pbkdf2Async(password, newSalt, 1000000);
+	        this.aesCipher = aes256gcm(finalKey);
+	        
+	        new Notice(`Migration complete! ${successCount}/${encryptedFiles.length} files migrated.`, 8000);
+	        
+	    } catch (error) {
+	        console.error('Migration failed:', error);
+	        new Notice('Migration failed. Files may be corrupted.', 5000);
+	    }
+	}
+	
     public async refreshFilenameIndex(): Promise<void> {
         const encryptedFiles = this.app.vault.getFiles().filter(file => file.extension === 'aes256');
         
@@ -1059,8 +1382,15 @@ export default class GlobalMarkdownEncrypt extends Plugin {
         this.filenameIndex.clear();
         this.isUnlocked = false;
         this.aesCipher = null;
+		this.vaultSalt = "";
         
-        // Properly remove the ribbon icon (FEEDBACK: Still not working)
+        // Securely clear password from memory
+        if (this.securePasswordManager) {
+            this.securePasswordManager.clearPassword();
+        }
+        
+        
+        // Remove the ribbon icon (FEEDBACK: Still not working)
         if (this.ribbonIcon) {
             this.ribbonIcon.remove();
             this.ribbonIcon = null;
@@ -1092,18 +1422,16 @@ export class GlobalMarkdownEncryptSettingTab extends PluginSettingTab {
                     })
             );
 
-        new Setting(containerEl)
-            .setName("Salt for PBKDF2: restart to take effect")
-            .setDesc("WARNING: ALL PREVIOUS DATA IS TEMPORARILY NOT AVAILABLE, IF CHANGED. RECOMMENDED TO CHANGE THIS VALUE TO A STRONG RANDOM VALUE. (to restore the default value, uninstall and reinstall this plugin.)")
-            .addText((text) =>
-                text
-                    .setValue(this.plugin.settings.saltValue)
-                    .onChange(async (value) => {
-                        let newSettings: GlobalMarkdownEncryptSettings = { ...this.plugin.settings };
-                        newSettings.saltValue = value;
-                        await this.plugin.saveSettings(newSettings);
-                    })
-            );
+        new Setting(containerEl) // Strictly enforced salt automation. THIS is the Gold standard for salt generation, no user-defined salts.
+        .setName("Encryption Salt")
+        .setDesc("🔒 This vault uses a unique encryption salt for enhanced security. Salt is automatically generated and managed per vault.")
+        .addButton((button) =>
+            button
+                .setButtonText("View Salt Info")
+                .onClick(() => {
+                    new Notice(`Vault salt: ${this.plugin.getVaultSalt().substring(0, 16)}...`, 5000);
+                })
+        );
 
         new Setting(containerEl)
             .setName("Default view mode")
