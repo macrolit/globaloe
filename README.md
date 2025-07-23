@@ -222,7 +222,7 @@ Memory access patterns: Could be analyzed in sophisticated attacks
 
 
 ## Update Notice: 
-### The Update auto-detects and upgrades salts from the old legacy salt to a safely generated one. 
+### The Update auto-detects, upgrades and re-encrypts all encrypted notes from the old legacy salt to the new, safely generated one. 
 ### ⚠️ **Users that had a custom salt MUST decrypt and manually transfer their files before updating the plugin in order to avoid DATA CORRUPTION**
 
 
