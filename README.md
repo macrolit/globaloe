@@ -51,10 +51,12 @@
 	- Decrypted content is wiped from memory.
         
     - No decrypted data is ever written to disk.
-        
+
+		
 3. **On Save:**
     
     - If editing is enabled, changes are encrypted and saved back to disk in encrypted form only.
+
 
 ## Security Model
     
@@ -82,9 +84,17 @@
 
   Document structure: Markdown formatting hidden within encrypted content.
 
-- **Custom Salt Definition**
+- **Secure Salt Generation**
   
-  Users can define their own password salt.
+  Securely generated encryption salt as per-vault basis.
+
+- **Secure Memory**
+  
+  The code uses typed arrays (Uint8Array) for handling sensitive data in secure buffers, which can be cleared from memory more effectively than strings. 
+
+- **Safe Clearing**
+
+  The SecureMemory.clearBuffer method ensures that sensitive data is cleared from memory by filling buffers with random values and then zeroing them out.
 
 - **Strong Key Derivation**
   
@@ -93,7 +103,10 @@
 - **Random IV Derivation**
   
   Each encryption uses a fresh IV.
+
+- **Timing Attack Protection**
   
+  The SecureMemory.secureEquals method provides a secure way to compare sensitive data, protecting against timing attacks.
 
 ## **Security Viability**
 
@@ -140,6 +153,7 @@ While file content is fully encrypted, an observer can see:
 - Access patterns: Frequency of file access observable
 - Directory names and folder structure: Everything other than .aes256 notes is handled by Obsidian in plain text
 - File timestamps: Creation/modification times visible
+- Limitations of JavaScript: It's important to note that JavaScript has some limitations when it comes to memory security. For example, strings are immutable and cannot be cleared from memory directly. The code minimizes the use of strings for sensitive data and converts them to secure buffers as soon as possible.
 
 
 ## Caveats
@@ -160,6 +174,7 @@ While file content is fully encrypted, an observer can see:
   
   Other plugins cannot interact with the encrypted notes for security reasons.
 
+
 ### Bottom Line
 
 This is an enhancement for a work-around project to note-wise encryption security in Obsidian, especially compatible for cloud environments. Although not being a zero-trace zero-knowledge approach, it is decent enough to keep oneself (relatively) calm when it comes to syncing sensitive files to foreign cloud servers.
@@ -179,9 +194,13 @@ Consider implementing metadata-proof measures (file size obfuscation, timestamp 
 
 - If Possible: 
 Prevent Side-Channel Vulnerabilities (Medium Risk); 
-Timing attacks: Password verification timing could leak some information, 
+~~Timing attacks: Password verification timing could leak some information~~ (done), 
 Memory access patterns: Could be analyzed in sophisticated attacks
 
+
+## Update Notice: 
+### The Update auto-detects and upgrades salts from the old legacy salt to a safely generated one. 
+### ⚠️ **Users that had a custom salt MUST decrypt and manually transfer their files before updating the plugin in order to avoid DATA CORRUPTION**
 
 
 # Default Plugin Specs
