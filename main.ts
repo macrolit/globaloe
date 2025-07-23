@@ -538,7 +538,7 @@ export class EncryptedFileView extends MarkdownView {
     }
 
     private addSwitchButton(): void {
-        // Remove existing button if any
+        // Remove excess additional ribbon plugin buttons if any (FEEDBACK: Not working)
         const existingButton = this.contentEl.querySelector('.encrypted-edit-switch-button');
         if (existingButton) {
             existingButton.remove();
@@ -1060,7 +1060,7 @@ export default class GlobalMarkdownEncrypt extends Plugin {
         this.isUnlocked = false;
         this.aesCipher = null;
         
-        // Properly remove the ribbon icon
+        // Properly remove the ribbon icon (FEEDBACK: Still not working)
         if (this.ribbonIcon) {
             this.ribbonIcon.remove();
             this.ribbonIcon = null;
