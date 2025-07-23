@@ -110,8 +110,31 @@
 
 ## **Security Viability**
 
-Strong against: Brute force attacks (due to 1M PBKDF2 iterations)
-Moderate against: Most cryptographic attacks (solid AES-256-GCM)
+Strong Against:
+
+    Brute Force Attacks:
+        Reasoning: The use of 1,000,000 PBKDF2 iterations significantly increases the computational cost of brute force attacks, making them impractical.
+
+    Timing Attacks:
+        Reasoning: The implementation of constant-time comparison functions for sensitive data, such as passwords, mitigates the risk of timing attacks leaking information.
+
+    Rainbow Table Attacks:
+        Reasoning: The use of unique, per-vault salts ensures that precomputed rainbow tables are ineffective, as the same password will hash to different values in different vaults.
+
+    Eavesdropping and Man-in-the-Middle Attacks:
+        Reasoning: AES-256-GCM provides both confidentiality and integrity, ensuring that encrypted data cannot be read or altered by unauthorized parties during transmission or storage.
+
+Moderate Against:
+
+    Side-Channel Attacks:
+        Reasoning: While efforts have been made to mitigate timing attacks, other side-channel attacks (e.g., cache timing, power analysis) may still be possible, especially in JavaScript environments where fine-grained control over execution is limited.
+
+    Memory Inspection Attacks:
+        Reasoning: The use of secure memory techniques helps to minimize the exposure of sensitive data, but JavaScript's limitations (e.g., immutable strings, garbage collection) mean that sensitive data may still be present in memory for some time.
+
+    Cryptographic Implementation Attacks:
+        Reasoning: The implementation uses well-regarded cryptographic algorithms (AES-256-GCM, PBKDF2), but any deviations from best practices or vulnerabilities in the underlying libraries could potentially be exploited.
+
 
 
 ## Dedicated file explorer
