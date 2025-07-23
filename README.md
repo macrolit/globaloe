@@ -164,19 +164,20 @@ While file content is fully encrypted, an observer can see:
 
 This is an enhancement for a work-around project to note-wise encryption security in Obsidian, especially compatible for cloud environments. Although not being a zero-trace zero-knowledge approach, it is decent enough to keep oneself (relatively) calm when it comes to syncing sensitive files to foreign cloud servers.
 
-Suitability:
+##### Suitability:
 ✅ Good for: Personal notes, casual privacy protection, cloud storage protection
+
 ❌ Not suitable for: Enterprise use, highly sensitive data, passcode or key storage, compliance requirements
 
-Possible Improvements:
+##### Possible Improvements:
 
-Short-term: 
+- Short-term: 
 Add password strength requirements
 
-Long-term: 
+- Long-term: 
 Consider implementing metadata-proof measures (file size obfuscation, timestamp randomization, etc.)
 
-If Possible: 
+- If Possible: 
 Prevent Side-Channel Vulnerabilities (Medium Risk); 
 Timing attacks: Password verification timing could leak some information, 
 Memory access patterns: Could be analyzed in sophisticated attacks
